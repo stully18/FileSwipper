@@ -3,8 +3,9 @@
 import json
 import re
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import types
+from google.genai import errors as genai_errors
 
 from core import FileInfo, CategorySuggestion
 
@@ -17,32 +18,29 @@ class AIError(Exception):
         self.user_message = user_message
 
 
+SYSTEM_INSTRUCTION = (
+    "You are a file organization assistant. Analyze the provided list of "
+    "files and suggest 3-8 logical folder categories to organize them.\n\n"
+    "Respond with JSON in this exact format:\n"
+    '{"categories": [\n'
+    '  {"folder_name": "Documents", "description": "Text documents and '
+    'spreadsheets", "extensions": [".pdf", ".docx", ".txt"]},\n'
+    '  ...\n'
+    "]}\n\n"
+    "Rules:\n"
+    "- Use simple English folder names (e.g. Documents, Images, Music)\n"
+    "- Every common file extension must appear in exactly one category\n"
+    '- Always include an "Other" category for miscellaneous files\n'
+    "- Only output valid JSON, no additional text"
+)
+
+
 class AISuggester:
     """Uses Gemini to suggest file organization categories."""
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash-lite"):
         self.model_name = model
-        genai.configure(api_key=api_key)
-        system_message = (
-            "You are a file organization assistant. Analyze the provided list of "
-            "files and suggest 3-8 logical folder categories to organize them.\n\n"
-            "Respond with JSON in this exact format:\n"
-            '{"categories": [\n'
-            '  {"folder_name": "Documents", "description": "Text documents and '
-            'spreadsheets", "extensions": [".pdf", ".docx", ".txt"]},\n'
-            '  ...\n'
-            "]}\n\n"
-            "Rules:\n"
-            "- Use simple English folder names (e.g. Documents, Images, Music)\n"
-            "- Every common file extension must appear in exactly one category\n"
-            '- Always include an "Other" category for miscellaneous files\n'
-            "- Only output valid JSON, no additional text"
-        )
-        self._model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=system_message,
-            generation_config={"temperature": 0.3},
-        )
+        self._client = genai.Client(api_key=api_key)
 
     def suggest_categories(
         self, file_summary: str, files: list[FileInfo]
@@ -52,44 +50,53 @@ class AISuggester:
         Makes an API call with the file summary, parses the response into
         CategorySuggestion objects. Retries once on JSON parse failure.
         """
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            temperature=0.3,
+        )
+
         try:
-            chat = self._model.start_chat()
-            response = chat.send_message(file_summary)
+            response = self._client.models.generate_content(
+                model=self.model_name,
+                contents=file_summary,
+                config=config,
+            )
             response_text = response.text
 
             try:
                 return self._parse_response(response_text, files)
             except (json.JSONDecodeError, KeyError, ValueError):
                 # Retry once with an extra instruction to return valid JSON
-                retry_model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    system_instruction=self._model._system_instruction,
-                    generation_config={"temperature": 0.1},
+                retry_config = types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.1,
                 )
-                retry_chat = retry_model.start_chat()
-                retry_chat.send_message(file_summary)
-                retry_response = retry_chat.send_message("Respond with valid JSON only.")
+                retry_response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=f"{file_summary}\n\nRespond with valid JSON only.",
+                    config=retry_config,
+                )
                 return self._parse_response(retry_response.text, files)
 
-        except google_exceptions.PermissionDenied:
+        except genai_errors.ClientError as e:
+            if e.status and e.status in ("UNAUTHENTICATED", "PERMISSION_DENIED"):
+                raise AIError(
+                    f"Gemini authentication failed: {e}",
+                    "Invalid API key. Please check your Gemini API key and try again.",
+                )
             raise AIError(
-                "Gemini authentication failed.",
-                "Invalid API key. Please check your Gemini API key and try again.",
+                f"Gemini client error: {e}",
+                "An unexpected AI service error occurred. Please try again later.",
             )
-        except google_exceptions.Unauthenticated:
+        except genai_errors.ServerError as e:
             raise AIError(
-                "Gemini authentication failed.",
-                "Invalid API key. Please check your Gemini API key and try again.",
-            )
-        except (google_exceptions.ServiceUnavailable, google_exceptions.DeadlineExceeded):
-            raise AIError(
-                "Gemini API connection error.",
+                f"Gemini server error: {e}",
                 "Could not connect to AI service. Please check your internet "
                 "connection and try again.",
             )
-        except google_exceptions.GoogleAPICallError as e:
+        except Exception as e:
             raise AIError(
-                f"Gemini API error: {e}",
+                f"Gemini error: {e}",
                 "An unexpected AI service error occurred. Please try again later.",
             )
 
@@ -186,13 +193,11 @@ class AISuggester:
             },
         }
 
-        # Invert: extension -> category name
         ext_to_category: dict[str, str] = {}
         for category_name, extensions in category_map.items():
             for ext in extensions:
                 ext_to_category[ext] = category_name
 
-        # Group files
         grouped: dict[str, list[FileInfo]] = {}
         for file in files:
             ext = file.extension.lower()

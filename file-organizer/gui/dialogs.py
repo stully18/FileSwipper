@@ -1,7 +1,7 @@
 """Dialog windows for the AI File Organizer application."""
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import errors as genai_errors
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
@@ -62,16 +62,16 @@ def _create_api_key_row():
 def _test_api_key(api_key: str) -> tuple[bool, str]:
     """Test a Gemini API key by listing models. Returns (success, message)."""
     try:
-        genai.configure(api_key=api_key)
-        list(genai.list_models())
+        client = genai.Client(api_key=api_key)
+        list(client.models.list())
         return True, "Connection successful!"
-    except google_exceptions.PermissionDenied:
-        return False, "Invalid API key."
-    except google_exceptions.Unauthenticated:
-        return False, "Invalid API key."
-    except (google_exceptions.ServiceUnavailable, google_exceptions.DeadlineExceeded):
+    except genai_errors.ClientError as e:
+        if e.status and e.status in ("UNAUTHENTICATED", "PERMISSION_DENIED"):
+            return False, "Invalid API key."
+        return False, f"API error: {e}"
+    except genai_errors.ServerError:
         return False, "Could not connect to Gemini. Check your internet connection."
-    except google_exceptions.GoogleAPICallError as exc:
+    except Exception as exc:
         return False, f"API error: {exc}"
 
 
