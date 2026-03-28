@@ -20,7 +20,7 @@ class AIError(Exception):
 class AISuggester:
     """Uses Gemini to suggest file organization categories."""
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash-lite"):
         self.model_name = model
         genai.configure(api_key=api_key)
         system_message = (

@@ -323,4 +323,4 @@ class MainWindow(QMainWindow):
     def _get_model(self) -> str:
         """Read the AI model from QSettings, defaulting to gemini-2.0-flash."""
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
-        return settings.value("model", "gemini-2.0-flash", type=str)
+        return settings.value("model", "gemini-2.0-flash-lite", type=str)
