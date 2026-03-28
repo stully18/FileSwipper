@@ -247,8 +247,9 @@ class SettingsDialog(QDialog):
         # --- AI Model --------------------------------------------------------
         layout.addWidget(QLabel("AI Model"))
         self._model_combo = QComboBox()
-        self._model_combo.addItem("gemini-2.0-flash-lite (Recommended)", "gemini-2.0-flash-lite")
-        self._model_combo.addItem("gemini-2.0-flash (Better, costs more)", "gemini-2.0-flash")
+        self._model_combo.addItem("gemini-2.5-flash-lite (Recommended)", "gemini-2.5-flash-lite")
+        self._model_combo.addItem("gemini-2.5-flash-lite", "gemini-2.5-flash-lite")
+        self._model_combo.addItem("gemini-1.5-pro (Better, costs more)", "gemini-1.5-pro")
         layout.addWidget(self._model_combo)
 
         layout.addSpacing(4)
@@ -306,7 +307,7 @@ class SettingsDialog(QDialog):
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
         self._key_edit.setText(settings.value("api_key", "", type=str))
 
-        model = settings.value("model", "gemini-2.0-flash-lite", type=str)
+        model = settings.value("model", "gemini-2.5-flash-lite", type=str)
         idx = self._model_combo.findData(model)
         if idx >= 0:
             self._model_combo.setCurrentIndex(idx)

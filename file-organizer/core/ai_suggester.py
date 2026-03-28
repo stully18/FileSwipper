@@ -38,7 +38,7 @@ SYSTEM_INSTRUCTION = (
 class AISuggester:
     """Uses Gemini to suggest file organization categories."""
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash-lite"):
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash-lite"):
         self.model_name = model
         self._client = genai.Client(api_key=api_key)
 
@@ -79,14 +79,19 @@ class AISuggester:
                 return self._parse_response(retry_response.text, files)
 
         except genai_errors.ClientError as e:
-            if e.status and e.status in ("UNAUTHENTICATED", "PERMISSION_DENIED"):
+            if hasattr(e, "code") and e.code in (401, 403):
+                raise AIError(
+                    f"Gemini authentication failed: {e}",
+                    "Invalid API key. Please check your Gemini API key and try again.",
+                )
+            if hasattr(e, "status") and e.status in ("UNAUTHENTICATED", "PERMISSION_DENIED"):
                 raise AIError(
                     f"Gemini authentication failed: {e}",
                     "Invalid API key. Please check your Gemini API key and try again.",
                 )
             raise AIError(
                 f"Gemini client error: {e}",
-                "An unexpected AI service error occurred. Please try again later.",
+                f"AI service error: {e}",
             )
         except genai_errors.ServerError as e:
             raise AIError(
@@ -96,8 +101,8 @@ class AISuggester:
             )
         except Exception as e:
             raise AIError(
-                f"Gemini error: {e}",
-                "An unexpected AI service error occurred. Please try again later.",
+                f"Gemini error: {type(e).__name__}: {e}",
+                f"Error ({type(e).__name__}): {e}",
             )
 
     def _parse_response(
