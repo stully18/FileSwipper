@@ -297,7 +297,7 @@ class MainWindow(QMainWindow):
             "About AI File Organizer",
             "AI File Organizer\n\n"
             "Intelligently organize your files into folders using AI.\n\n"
-            "Powered by OpenAI.",
+            "Powered by Google Gemini.",
         )
 
     # ------------------------------------------------------------------
@@ -316,11 +316,11 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _get_api_key(self) -> str:
-        """Read the OpenAI API key from QSettings."""
+        """Read the Gemini API key from QSettings."""
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
         return settings.value("api_key", "", type=str)
 
     def _get_model(self) -> str:
-        """Read the AI model from QSettings, defaulting to gpt-4o-mini."""
+        """Read the AI model from QSettings, defaulting to gemini-2.0-flash."""
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
-        return settings.value("model", "gpt-4o-mini", type=str)
+        return settings.value("model", "gemini-2.0-flash", type=str)

@@ -3,7 +3,8 @@
 import json
 import re
 
-import openai
+import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 
 from core import FileInfo, CategorySuggestion
 
@@ -17,66 +18,11 @@ class AIError(Exception):
 
 
 class AISuggester:
-    """Uses OpenAI to suggest file organization categories."""
+    """Uses Gemini to suggest file organization categories."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
-        self.model = model
-        self.client = openai.OpenAI(api_key=api_key)
-
-    def suggest_categories(
-        self, file_summary: str, files: list[FileInfo]
-    ) -> list[CategorySuggestion]:
-        """Suggest categories for the given files using AI.
-
-        Makes an API call with the file summary, parses the response into
-        CategorySuggestion objects. Retries once on JSON parse failure.
-        """
-        messages = self._build_prompt(file_summary)
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.3,
-            )
-            response_text = response.choices[0].message.content
-
-            try:
-                return self._parse_response(response_text, files)
-            except (json.JSONDecodeError, KeyError, ValueError):
-                # Retry once with an extra instruction to return valid JSON
-                messages.append({"role": "assistant", "content": response_text})
-                messages.append(
-                    {"role": "user", "content": "Respond with valid JSON only."}
-                )
-
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.1,
-                )
-                response_text = response.choices[0].message.content
-                return self._parse_response(response_text, files)
-
-        except openai.AuthenticationError:
-            raise AIError(
-                "OpenAI authentication failed.",
-                "Invalid API key. Please check your OpenAI API key and try again.",
-            )
-        except (openai.APIConnectionError, openai.APITimeoutError):
-            raise AIError(
-                "OpenAI API connection error.",
-                "Could not connect to AI service. Please check your internet "
-                "connection and try again.",
-            )
-        except openai.OpenAIError as e:
-            raise AIError(
-                f"OpenAI API error: {e}",
-                "An unexpected AI service error occurred. Please try again later.",
-            )
-
-    def _build_prompt(self, file_summary: str) -> list[dict]:
-        """Build the message list for the OpenAI API call."""
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+        self.model_name = model
+        genai.configure(api_key=api_key)
         system_message = (
             "You are a file organization assistant. Analyze the provided list of "
             "files and suggest 3-8 logical folder categories to organize them.\n\n"
@@ -92,11 +38,60 @@ class AISuggester:
             '- Always include an "Other" category for miscellaneous files\n'
             "- Only output valid JSON, no additional text"
         )
+        self._model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=system_message,
+            generation_config={"temperature": 0.3},
+        )
 
-        return [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": file_summary},
-        ]
+    def suggest_categories(
+        self, file_summary: str, files: list[FileInfo]
+    ) -> list[CategorySuggestion]:
+        """Suggest categories for the given files using AI.
+
+        Makes an API call with the file summary, parses the response into
+        CategorySuggestion objects. Retries once on JSON parse failure.
+        """
+        try:
+            chat = self._model.start_chat()
+            response = chat.send_message(file_summary)
+            response_text = response.text
+
+            try:
+                return self._parse_response(response_text, files)
+            except (json.JSONDecodeError, KeyError, ValueError):
+                # Retry once with an extra instruction to return valid JSON
+                retry_model = genai.GenerativeModel(
+                    model_name=self.model_name,
+                    system_instruction=self._model._system_instruction,
+                    generation_config={"temperature": 0.1},
+                )
+                retry_chat = retry_model.start_chat()
+                retry_chat.send_message(file_summary)
+                retry_response = retry_chat.send_message("Respond with valid JSON only.")
+                return self._parse_response(retry_response.text, files)
+
+        except google_exceptions.PermissionDenied:
+            raise AIError(
+                "Gemini authentication failed.",
+                "Invalid API key. Please check your Gemini API key and try again.",
+            )
+        except google_exceptions.Unauthenticated:
+            raise AIError(
+                "Gemini authentication failed.",
+                "Invalid API key. Please check your Gemini API key and try again.",
+            )
+        except (google_exceptions.ServiceUnavailable, google_exceptions.DeadlineExceeded):
+            raise AIError(
+                "Gemini API connection error.",
+                "Could not connect to AI service. Please check your internet "
+                "connection and try again.",
+            )
+        except google_exceptions.GoogleAPICallError as e:
+            raise AIError(
+                f"Gemini API error: {e}",
+                "An unexpected AI service error occurred. Please try again later.",
+            )
 
     def _parse_response(
         self, response_text: str, files: list[FileInfo]

@@ -1,6 +1,7 @@
 """Dialog windows for the AI File Organizer application."""
 
-import openai
+import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
@@ -37,7 +38,7 @@ def _create_api_key_row():
     layout = QHBoxLayout()
     line_edit = QLineEdit()
     line_edit.setEchoMode(QLineEdit.EchoMode.Password)
-    line_edit.setPlaceholderText("sk-...")
+    line_edit.setPlaceholderText("AIzaSy...")
 
     toggle_btn = QPushButton("Show")
     toggle_btn.setFixedWidth(60)
@@ -59,16 +60,18 @@ def _create_api_key_row():
 
 
 def _test_api_key(api_key: str) -> tuple[bool, str]:
-    """Test an OpenAI API key by listing models. Returns (success, message)."""
+    """Test a Gemini API key by listing models. Returns (success, message)."""
     try:
-        client = openai.OpenAI(api_key=api_key)
-        client.models.list()
+        genai.configure(api_key=api_key)
+        list(genai.list_models())
         return True, "Connection successful!"
-    except openai.AuthenticationError:
+    except google_exceptions.PermissionDenied:
         return False, "Invalid API key."
-    except (openai.APIConnectionError, openai.APITimeoutError):
-        return False, "Could not connect to OpenAI. Check your internet connection."
-    except openai.OpenAIError as exc:
+    except google_exceptions.Unauthenticated:
+        return False, "Invalid API key."
+    except (google_exceptions.ServiceUnavailable, google_exceptions.DeadlineExceeded):
+        return False, "Could not connect to Gemini. Check your internet connection."
+    except google_exceptions.GoogleAPICallError as exc:
         return False, f"API error: {exc}"
 
 
@@ -77,7 +80,7 @@ def _test_api_key(api_key: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 
 class FirstTimeSetupDialog(QDialog):
-    """Shown on first launch to collect the OpenAI API key."""
+    """Shown on first launch to collect the Gemini API key."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -112,9 +115,9 @@ class FirstTimeSetupDialog(QDialog):
 
         # Explanation
         explanation = QLabel(
-            "AI File Organizer uses OpenAI to intelligently suggest how to "
-            "organize your files into folders. To get started, you'll need an "
-            "OpenAI API key. Your key is stored locally and is never shared."
+            "AI File Organizer uses Gemini to intelligently suggest how to "
+            "organize your files into folders. To get started, you'll need a "
+            "Gemini API key. Your key is stored locally and is never shared."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
@@ -122,14 +125,14 @@ class FirstTimeSetupDialog(QDialog):
         layout.addSpacing(4)
 
         # API key
-        key_label = QLabel("OpenAI API Key")
+        key_label = QLabel("Gemini API Key")
         key_label.setFont(QFont())
         layout.addWidget(key_label)
 
         key_row, self._key_edit, self._toggle_btn = _create_api_key_row()
         layout.addLayout(key_row)
 
-        instructions = QLabel("You can get an API key from OpenAI's website.")
+        instructions = QLabel("You can get an API key from Google AI Studio.")
         instructions.setStyleSheet("color: grey; font-size: 11px;")
         layout.addWidget(instructions)
 
@@ -227,7 +230,7 @@ class SettingsDialog(QDialog):
         layout.addSpacing(4)
 
         # --- API Key ---------------------------------------------------------
-        layout.addWidget(QLabel("OpenAI API Key"))
+        layout.addWidget(QLabel("Gemini API Key"))
         key_row, self._key_edit, self._toggle_btn = _create_api_key_row()
         layout.addLayout(key_row)
 
@@ -244,8 +247,8 @@ class SettingsDialog(QDialog):
         # --- AI Model --------------------------------------------------------
         layout.addWidget(QLabel("AI Model"))
         self._model_combo = QComboBox()
-        self._model_combo.addItem("gpt-4o-mini (Recommended)", "gpt-4o-mini")
-        self._model_combo.addItem("gpt-4o (Better, costs more)", "gpt-4o")
+        self._model_combo.addItem("gemini-2.0-flash (Recommended)", "gemini-2.0-flash")
+        self._model_combo.addItem("gemini-1.5-pro (Better, costs more)", "gemini-1.5-pro")
         layout.addWidget(self._model_combo)
 
         layout.addSpacing(4)
@@ -303,7 +306,7 @@ class SettingsDialog(QDialog):
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
         self._key_edit.setText(settings.value("api_key", "", type=str))
 
-        model = settings.value("model", "gpt-4o-mini", type=str)
+        model = settings.value("model", "gemini-2.0-flash", type=str)
         idx = self._model_combo.findData(model)
         if idx >= 0:
             self._model_combo.setCurrentIndex(idx)
