@@ -122,7 +122,11 @@ class CategoryCard(QFrame):
         self._file_list = QListWidget()
         self._file_list.setVisible(False)
         self._file_list.setMaximumHeight(200)
-        self._file_list.setAlternatingRowColors(True)
+        self._file_list.setAlternatingRowColors(False)
+        self._file_list.setStyleSheet(
+            "QListWidget { background-color: #ffffff; color: #111111; }"
+            "QListWidget::item { background-color: #ffffff; color: #111111; }"
+        )
         layout.addWidget(self._file_list)
 
     def _populate(self):
@@ -190,17 +194,19 @@ class SuggestionsScreen(QWidget):
         def run(self):
             try:
                 suggester = AISuggester(api_key=self._api_key, model=self._model)
-                # Build a summary string for the prompt
-                summary_lines = []
+                # Send a sample of filenames for context + full extension counts
+                sample = self._files[:200] if len(self._files) > 200 else self._files
                 ext_counts: dict[str, int] = {}
                 for f in self._files:
                     ext = f.extension.lower() if f.extension else "(no ext)"
                     ext_counts[ext] = ext_counts.get(ext, 0) + 1
-                summary_lines.append(f"Total files: {len(self._files)}")
-                for ext, count in sorted(
-                    ext_counts.items(), key=lambda x: x[1], reverse=True
-                ):
+
+                summary_lines = [f"Total files: {len(self._files)}", "", "Extension counts:"]
+                for ext, count in sorted(ext_counts.items(), key=lambda x: x[1], reverse=True):
                     summary_lines.append(f"  {ext}: {count} files")
+                summary_lines += ["", f"Sample filenames ({len(sample)} of {len(self._files)}):"]
+                for f in sample:
+                    summary_lines.append(f"  {f.name}")
                 file_summary = "\n".join(summary_lines)
 
                 suggestions = suggester.suggest_categories(file_summary, self._files)

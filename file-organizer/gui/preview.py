@@ -70,7 +70,12 @@ class PreviewScreen(QWidget):
         self._tree = QTreeWidget()
         self._tree.setHeaderLabels(["File Organization Plan"])
         self._tree.setProperty("class", "preview-tree")
-        self._tree.setAlternatingRowColors(True)
+        self._tree.setAlternatingRowColors(False)
+        self._tree.setStyleSheet(
+            "QTreeWidget { background-color: #ffffff; color: #111111; }"
+            "QTreeWidget::item { background-color: #ffffff; color: #111111; }"
+            "QTreeWidget::item:selected { background-color: #dbeafe; color: #1e40af; }"
+        )
         layout.addWidget(self._tree, 1)  # stretch factor 1
 
         # --- Checkbox ---

@@ -19,17 +19,23 @@ class AIError(Exception):
 
 
 SYSTEM_INSTRUCTION = (
-    "You are a file organization assistant. Analyze the provided list of "
-    "files and suggest 3-8 logical folder categories to organize them.\n\n"
+    "You are a file organization assistant. Analyze the provided file list "
+    "(extension counts + sample filenames) and suggest 3-8 logical folder "
+    "categories.\n\n"
+    "Use the sample filenames to understand context — for example, if you see "
+    "'Invoice_March.pdf' and 'Tax_Return.pdf', create a Finance category for "
+    ".pdf files matching those patterns, separate from 'Ebook_Python.pdf' "
+    "which belongs in Books.\n\n"
     "Respond with JSON in this exact format:\n"
     '{"categories": [\n'
-    '  {"folder_name": "Documents", "description": "Text documents and '
-    'spreadsheets", "extensions": [".pdf", ".docx", ".txt"]},\n'
+    '  {"folder_name": "Finance", "description": "Invoices, receipts and tax documents", '
+    '"extensions": [".pdf", ".xlsx"], "keywords": ["invoice", "receipt", "tax", "budget", "payroll", "expense", "bank", "payment"]},\n'
     '  ...\n'
     "]}\n\n"
     "Rules:\n"
-    "- Use simple English folder names (e.g. Documents, Images, Music)\n"
-    "- Every common file extension must appear in exactly one category\n"
+    "- Use simple English folder names (e.g. Finance, Photos, Music, Code)\n"
+    "- 'keywords' are lowercase words found in filenames that indicate the category\n"
+    "- An extension can appear in multiple categories if keywords distinguish them\n"
     '- Always include an "Other" category for miscellaneous files\n'
     "- Only output valid JSON, no additional text"
 )
@@ -73,7 +79,7 @@ class AISuggester:
                 )
                 retry_response = self._client.models.generate_content(
                     model=self.model_name,
-                    contents=f"{file_summary}\n\nRespond with valid JSON only.",
+                    contents=f"{file_summary}\n\nYou MUST respond with valid JSON only. No markdown, no explanation.",
                     config=retry_config,
                 )
                 return self._parse_response(retry_response.text, files)
@@ -127,24 +133,44 @@ class AISuggester:
 
         categories_data = data["categories"]
 
-        # Build extension-to-category mapping
-        ext_to_category: dict[str, str] = {}
+        # Build lookup structures: extension+keyword -> category
         category_info: dict[str, str] = {}
+        # Each entry: (extensions_set, keywords_set, folder_name)
+        rules: list[tuple[set, set, str]] = []
 
         for cat in categories_data:
             folder_name = cat["folder_name"]
-            description = cat.get("description", "")
-            category_info[folder_name] = description
-            for ext in cat.get("extensions", []):
-                ext_lower = ext.lower() if ext.startswith(".") else f".{ext}".lower()
-                ext_to_category[ext_lower] = folder_name
+            category_info[folder_name] = cat.get("description", "")
+            exts = {e.lower() if e.startswith(".") else f".{e}".lower() for e in cat.get("extensions", [])}
+            keywords = {k.lower() for k in cat.get("keywords", [])}
+            rules.append((exts, keywords, folder_name))
 
-        # CRITICAL second pass: iterate ALL files and assign each to a category
-        category_files: dict[str, list[FileInfo]] = {}
-
-        for file in files:
+        def assign_file(file: FileInfo) -> str:
             ext = file.extension.lower()
-            folder = ext_to_category.get(ext, "Other")
+            name_lower = file.name.lower()
+            # First pass: keyword match within matching extension
+            for exts, keywords, folder in rules:
+                if folder == "Other":
+                    continue
+                if ext in exts and keywords and any(kw in name_lower for kw in keywords):
+                    return folder
+            # Second pass: extension-only match (no keywords defined or no keyword hit)
+            for exts, keywords, folder in rules:
+                if folder == "Other":
+                    continue
+                if ext in exts and not keywords:
+                    return folder
+            # Third pass: extension match ignoring keywords
+            for exts, keywords, folder in rules:
+                if folder == "Other":
+                    continue
+                if ext in exts:
+                    return folder
+            return "Other"
+
+        category_files: dict[str, list[FileInfo]] = {}
+        for file in files:
+            folder = assign_file(file)
             if folder not in category_files:
                 category_files[folder] = []
             category_files[folder].append(file)
