@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  # ── Linux ───────────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt system dependencies
+        # These are needed to BUILD on the runner.
+        # PyInstaller collects them into the bundle so end-users don't need them.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-cursor0 libxcb-xinerama0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xkb1 libxkbcommon-x11-0 libgl1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r file-organizer/requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          cd file-organizer
+          pyinstaller fileswipper.spec --clean --noconfirm
+
+      - name: Archive bundle
+        run: |
+          tar -czf FileSwipper-linux-x86_64.tar.gz -C file-organizer/dist FileSwipper
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileSwipper-linux-x86_64
+          path: FileSwipper-linux-x86_64.tar.gz
+          retention-days: 7
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FileSwipper-linux-x86_64.tar.gz
+
+  # ── Windows ─────────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyinstaller
+          pip install -r file-organizer/requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          cd file-organizer
+          pyinstaller fileswipper.spec --clean --noconfirm
+
+      - name: Archive bundle
+        run: |
+          Compress-Archive -Path file-organizer/dist/FileSwipper `
+                           -DestinationPath FileSwipper-windows-x64.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileSwipper-windows-x64
+          path: FileSwipper-windows-x64.zip
+          retention-days: 7
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FileSwipper-windows-x64.zip
