@@ -84,9 +84,9 @@ exe = EXE(
     console=(sys.platform != 'win32'),
     disable_windowed_traceback=False,
     argv_emulation=False,       # macOS-only; ignored on Linux/Windows
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    target_arch=None,           # macOS-only; ignored on Linux/Windows
+    codesign_identity=None,     # macOS-only; ignored on Linux/Windows
+    entitlements_file=None,     # macOS-only; ignored on Linux/Windows
 )
 
 
