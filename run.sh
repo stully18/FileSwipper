@@ -9,7 +9,7 @@
 
 set -e
 
-if ! dpkg -l libxcb-cursor0 &>/dev/null 2>&1; then
+if command -v dpkg &>/dev/null && ! dpkg -l libxcb-cursor0 &>/dev/null 2>&1; then
     echo "Installing missing Qt dependency libxcb-cursor0..."
     sudo apt-get install -y libxcb-cursor0 2>/dev/null || true
 fi
