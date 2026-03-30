@@ -6,6 +6,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write  # required by softprops/action-gh-release to upload release assets
+
 jobs:
   # ── Linux ───────────────────────────────────────────────────────────────────
   build-linux:
