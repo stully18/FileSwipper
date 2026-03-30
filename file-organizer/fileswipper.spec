@@ -18,7 +18,6 @@ datas = [
     ('resources/styles.qss', 'resources'),
 ]
 datas += collect_data_files('google.genai')
-datas += collect_data_files('google.auth')
 
 
 # ── Binaries ─────────────────────────────────────────────────────────────────
@@ -81,10 +80,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=(sys.platform != 'win32'),
     disable_windowed_traceback=False,
-    argv_emulation=False,
+    argv_emulation=False,       # macOS-only; ignored on Linux/Windows
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
@@ -99,7 +98,6 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
-    upx_exclude=[],
+    upx=False,
     name='FileSwipper',
 )
