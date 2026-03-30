@@ -12,7 +12,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$SCRIPT_DIR/file-organizer"
 BUILD_VENV="$SCRIPT_DIR/.build-venv"
-DIST_DIR="$SCRIPT_DIR/dist"
+DIST_DIR="$SCRIPT_DIR/dist"  # archive destination (PyInstaller writes to file-organizer/dist/)
 
 echo "=== FileSwipper Linux Build ==="
 
@@ -20,6 +20,11 @@ echo "=== FileSwipper Linux Build ==="
 if [ ! -d "$BUILD_VENV" ]; then
     echo "Creating build virtual environment..."
     python3 -m venv "$BUILD_VENV"
+fi
+
+if [ ! -f "$BUILD_VENV/bin/activate" ]; then
+    echo "ERROR: venv creation failed — activate not found at $BUILD_VENV/bin/activate" >&2
+    exit 1
 fi
 
 source "$BUILD_VENV/bin/activate"
@@ -35,6 +40,11 @@ cd "$APP_DIR"
 pyinstaller fileswipper.spec --clean --noconfirm
 
 # Archive the onedir bundle
+if [ ! -d "$APP_DIR/dist/FileSwipper" ]; then
+    echo "ERROR: PyInstaller output not found at $APP_DIR/dist/FileSwipper" >&2
+    exit 1
+fi
+
 echo "Archiving..."
 mkdir -p "$DIST_DIR"
 OUTPUT="$DIST_DIR/FileSwipper-linux-x86_64.tar.gz"
