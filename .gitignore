@@ -1,6 +1,7 @@
 # Environment / secrets
 .env
 *.env
+SECURITY_NOTES.md
 
 # Python
 __pycache__/
